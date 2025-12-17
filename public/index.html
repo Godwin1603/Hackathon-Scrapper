@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hackathon Explorer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS CDN for styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    :root {
+      --primary: #2c3e50;
+      --secondary: #3498db;
+      --light: #ecf0f1;
+      --dark: #2c3e50;
+      --success: #2ecc71;
+      --warning: #f39c12;
+      --danger: #e74c3c;
+    }
+
+    .theme-badge {
+      background-color: var(--light);
+      color: var(--dark);
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .theme-badge i {
+      margin-right: 5px;
+      font-size: 0.7rem;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      margin-left: 5px;
+    }
+
+    .status-open {
+      background-color: var(--success);
+      color: white;
+    }
+
+    .status-upcoming {
+      background-color: var(--warning);
+      color: white;
+    }
+
+    .filter-btn {
+      background-color: var(--light);
+      color: var(--dark);
+      border: 1px solid #ddd;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
+    }
+
+    .filter-btn:hover {
+      background-color: #e0e0e0;
+    }
+
+    .filter-btn.active {
+      background-color: var(--secondary);
+      color: white;
+      border-color: var(--secondary);
+    }
+
+    .filter-reset {
+      background-color: var(--danger);
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+
+    .filter-reset:hover {
+      background-color: #c0392b;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 30px;
+      font-size: 1.2rem;
+      color: var(--secondary);
+    }
+
+    .no-results {
+      text-align: center;
+      padding: 30px;
+      font-size: 1.1rem;
+      color: var(--dark);
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <header class="bg-indigo-800 text-white py-4 shadow-md sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 flex justify-between items-center">
+      <h1 class="text-2xl font-bold">Hackathon Explorer</h1>
+      <button id="refreshBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
+        <i class="fas fa-sync-alt mr-2"></i>Refresh Data
+      </button>
+    </div>
+  </header>
+
+  <div class="max-w-6xl mx-auto py-6 px-4">
+    <!-- Filters Section -->
+    <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3">Status</h3>
+        <div class="flex flex-wrap gap-2" id="statusFilter">
+          <button class="filter-btn active" data-status="all">All Active</button>
+          <button class="filter-btn" data-status="open">Open Now</button>
+          <button class="filter-btn" data-status="upcoming">Upcoming</button>
+        </div>
+      </div>
+      
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3">Prize Amount</h3>
+        <div class="flex flex-wrap gap-2" id="prizeFilter">
+          <button class="filter-btn active" data-prize="all">All</button>
+          <button class="filter-btn" data-prize="high">High ($10k+)</button>
+          <button class="filter-btn" data-prize="medium">Medium ($1k-$10k)</button>
+          <button class="filter-btn" data-prize="low">Low (<$1k)</button>
+        </div>
+      </div>
+      
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3">Participants</h3>
+        <div class="flex flex-wrap gap-2" id="participantsFilter">
+          <button class="filter-btn active" data-participants="all">All</button>
+          <button class="filter-btn" data-participants="large">Large (500+)</button>
+          <button class="filter-btn" data-participants="medium">Medium (100-500)</button>
+          <button class="filter-btn" data-participants="small">Small (<100)</button>
+        </div>
+      </div>
+      
+      <div class="mb-4">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3">Themes</h3>
+        <div class="flex flex-wrap gap-2" id="themesFilter">
+          <button class="filter-btn active" data-theme="all">All</button>
+          <!-- Will be populated dynamically -->
+        </div>
+      </div>
+      
+      <button class="filter-reset" id="resetFilters">Reset All Filters</button>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="loading">
+      <i class="fas fa-spinner fa-spin mr-2"></i>Loading hackathons...
+    </div>
+    
+    <!-- Hackathons Grid -->
+    <div id="hackathonsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+  </div>
+
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyB-Xve-6sZQLxpYUt3GXl4svafoU06095o",
+      authDomain: "hack-job-958fe.firebaseapp.com",
+      projectId: "hack-job-958fe",
+      storageBucket: "hack-job-958fe.appspot.com",
+      messagingSenderId: "967253891072",
+      appId: "1:967253891072:web:84e092e268115d120ee0e5",
+      measurementId: "G-4Z7Q285FG5"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // DOM elements
+    const hackathonsGrid = document.getElementById('hackathonsGrid');
+    const loadingElement = document.getElementById('loading');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const resetFiltersBtn = document.getElementById('resetFilters');
+    
+    // Filter elements
+    const statusFilter = document.getElementById('statusFilter');
+    const prizeFilter = document.getElementById('prizeFilter');
+    const participantsFilter = document.getElementById('participantsFilter');
+    const themesFilter = document.getElementById('themesFilter');
+
+    // Current filters
+    let currentFilters = {
+      status: 'all',
+      prize: 'all',
+      participants: 'all',
+      themes: []
+    };
+
+    // All hackathons data
+    let allHackathons = [];
+    let allThemes = [];
+
+    // Function to determine hackathon status
+    function getHackathonStatus(hackathon) {
+      if (!hackathon.days_left || hackathon.days_left === "Unknown") {
+        return 'unknown';
+      }
+      
+      // Handle "Ended" case first
+      if (hackathon.days_left === "Ended") {
+        return 'closed';
+      }
+      
+      const daysLeft = parseInt(hackathon.days_left);
+      if (isNaN(daysLeft)) {
+        return 'unknown';
+      } else if (daysLeft > 0) {
+        return 'open';
+      } else if (daysLeft < 0) {
+        return 'closed';
+      } else {
+        return 'upcoming';
+      }
+    }
+
+    // Fetch and display hackathons
+    async function fetchHackathons() {
+      try {
+        loadingElement.style.display = 'block';
+        hackathonsGrid.innerHTML = '';
+        
+        const snapshot = await db.collection('hackathons').get();
+        
+        if (snapshot.empty) {
+          hackathonsGrid.innerHTML = '<div class="no-results">No hackathons found</div>';
+          loadingElement.style.display = 'none';
+          return;
+        }
+        
+        allHackathons = [];
+        allThemes = new Set();
+        
+        snapshot.forEach(doc => {
+          const hackathon = doc.data();
+          hackathon.status = getHackathonStatus(hackathon);
+          
+          // Only include if not closed
+          if (hackathon.status !== 'closed') {
+            allHackathons.push(hackathon);
+            
+            // Collect themes
+            if (hackathon.themes && hackathon.themes.length > 0) {
+              hackathon.themes.forEach(theme => allThemes.add(theme));
+            }
+          }
+        });
+        
+        // Update themes filter
+        updateThemesFilter();
+        
+        // Apply current filters
+        applyFilters();
+        
+        loadingElement.style.display = 'none';
+      } catch (error) {
+        console.error("Error fetching hackathons: ", error);
+        loadingElement.innerHTML = '<p>Error loading hackathons. Please try again.</p>';
+      }
+    }
+
+    // Update themes filter options
+    function updateThemesFilter() {
+      themesFilter.innerHTML = '<button class="filter-btn active" data-theme="all">All</button>';
+      
+      Array.from(allThemes).sort().forEach(theme => {
+        themesFilter.innerHTML += `
+          <button class="filter-btn" data-theme="${theme}">${theme}</button>
+        `;
+      });
+    }
+
+    // Render a single hackathon card
+    function renderHackathonCard(hackathon) {
+      const card = document.createElement('div');
+      card.className = 'bg-white rounded-xl shadow-md hover:shadow-lg transition overflow-hidden';
+      
+      // Format status badge
+      let statusBadge = '';
+      if (hackathon.days_left && hackathon.days_left !== "Unknown") {
+        const statusClass = hackathon.status === 'open' ? 'status-open' : 'status-upcoming';
+        statusBadge = `<span class="status-badge ${statusClass}">${hackathon.days_left}</span>`;
+      }
+      
+      // Format themes
+      let themesHTML = '';
+      if (hackathon.themes && hackathon.themes.length > 0) {
+        themesHTML = hackathon.themes.map(theme => `
+          <div class="theme-badge">
+            <i class="fas fa-tag"></i> ${theme}
+          </div>
+        `).join('');
+      } else {
+        themesHTML = '<div class="theme-badge">No themes specified</div>';
+      }
+      
+      // Use image_url if available, otherwise use placeholder
+      const imageUrl = hackathon.image_url || 'https://via.placeholder.com/300x180?text=No+Image';
+      
+      card.innerHTML = `
+        <div class="bg-indigo-800 text-white p-4">
+          <h3 class="text-xl font-semibold">${hackathon.title}${statusBadge}</h3>
+          <a href="${hackathon.link || '#'}" target="_blank" rel="noopener noreferrer" class="text-indigo-200 hover:text-white text-sm mt-1 inline-block">
+            <i class="fas fa-external-link-alt mr-1"></i> View Details
+          </a>
+        </div>
+        <div class="p-4">
+          <img src="${imageUrl}" alt="${hackathon.title}" class="rounded-md w-full h-48 object-cover mb-4">
+          
+          <div class="flex items-start mb-3">
+            <i class="fas fa-trophy text-indigo-600 mt-1 mr-2"></i>
+            <div>
+              <p class="font-medium text-gray-800">Prize:</p>
+              <p class="text-gray-600">${hackathon.prize || 'Not specified'}</p>
+            </div>
+          </div>
+          
+          <div class="flex items-start mb-3">
+            <i class="fas fa-users text-indigo-600 mt-1 mr-2"></i>
+            <div>
+              <p class="font-medium text-gray-800">Participants:</p>
+              <p class="text-gray-600">${hackathon.participants || 'Not specified'}</p>
+            </div>
+          </div>
+          
+          <div class="flex items-start mb-3">
+            <i class="fas fa-building text-indigo-600 mt-1 mr-2"></i>
+            <div>
+              <p class="font-medium text-gray-800">Host:</p>
+              <p class="text-gray-600">${hackathon.host || 'Not specified'}</p>
+            </div>
+          </div>
+          
+          <div class="flex items-start mb-3">
+            <i class="fas fa-calendar-alt text-indigo-600 mt-1 mr-2"></i>
+            <div>
+              <p class="font-medium text-gray-800">Submission Period:</p>
+              <p class="text-gray-600">${hackathon.submission_period || hackathon.registration_ends || 'Not specified'}</p>
+            </div>
+          </div>
+          
+          <div class="flex items-start">
+            <i class="fas fa-tags text-indigo-600 mt-1 mr-2"></i>
+            <div>
+              <p class="font-medium text-gray-800">Themes:</p>
+              <div class="flex flex-wrap gap-2 mt-2">${themesHTML}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      hackathonsGrid.appendChild(card);
+    }
+
+    // Apply current filters
+    function applyFilters() {
+      hackathonsGrid.innerHTML = '';
+      
+      let filteredHackathons = allHackathons.filter(hackathon => {
+        // Status filter
+        if (currentFilters.status !== 'all' && hackathon.status !== currentFilters.status) {
+          return false;
+        }
+        
+        // Prize filter
+        if (currentFilters.prize !== 'all') {
+          const prizeAmount = parseFloat((hackathon.prize || '').replace(/[^0-9.]/g, '')) || 0;
+          if (currentFilters.prize === 'high' && prizeAmount < 10000) return false;
+          if (currentFilters.prize === 'medium' && (prizeAmount >= 10000 || prizeAmount < 1000)) return false;
+          if (currentFilters.prize === 'low' && prizeAmount >= 1000) return false;
+        }
+        
+        // Participants filter
+        if (currentFilters.participants !== 'all') {
+          const participants = parseInt((hackathon.participants || '').replace(/[^0-9]/g, '')) || 0;
+          if (currentFilters.participants === 'large' && participants < 500) return false;
+          if (currentFilters.participants === 'medium' && (participants >= 500 || participants < 100)) return false;
+          if (currentFilters.participants === 'small' && participants >= 100) return false;
+        }
+        
+        // Themes filter
+        if (currentFilters.themes.length > 0 && hackathon.themes) {
+          const hasMatchingTheme = currentFilters.themes.some(theme => 
+            hackathon.themes.includes(theme)
+          );
+          if (!hasMatchingTheme) return false;
+        }
+        
+        return true;
+      });
+      
+      if (filteredHackathons.length === 0) {
+        hackathonsGrid.innerHTML = '<div class="no-results">No hackathons match your filters</div>';
+      } else {
+        filteredHackathons.forEach(renderHackathonCard);
+      }
+    }
+
+    // Set up filter button events
+    function setupFilterButtons() {
+      // Status filter
+      statusFilter.addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-btn')) {
+          document.querySelectorAll('#statusFilter .filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+          });
+          e.target.classList.add('active');
+          currentFilters.status = e.target.dataset.status;
+          applyFilters();
+        }
+      });
+      
+      // Prize filter
+      prizeFilter.addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-btn')) {
+          document.querySelectorAll('#prizeFilter .filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+          });
+          e.target.classList.add('active');
+          currentFilters.prize = e.target.dataset.prize;
+          applyFilters();
+        }
+      });
+      
+      // Participants filter
+      participantsFilter.addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-btn')) {
+          document.querySelectorAll('#participantsFilter .filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+          });
+          e.target.classList.add('active');
+          currentFilters.participants = e.target.dataset.participants;
+          applyFilters();
+        }
+      });
+      
+      // Themes filter
+      themesFilter.addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-btn')) {
+          const theme = e.target.dataset.theme;
+          
+          if (theme === 'all') {
+            // Select "All" - deselect all other theme buttons
+            document.querySelectorAll('#themesFilter .filter-btn').forEach(btn => {
+              btn.classList.remove('active');
+            });
+            e.target.classList.add('active');
+            currentFilters.themes = [];
+          } else {
+            // Deselect "All" if it was selected
+            document.querySelector('#themesFilter [data-theme="all"]').classList.remove('active');
+            
+            // Toggle the clicked theme
+            e.target.classList.toggle('active');
+            
+            // Update current themes
+            currentFilters.themes = [];
+            document.querySelectorAll('#themesFilter .filter-btn.active').forEach(btn => {
+              if (btn.dataset.theme !== 'all') {
+                currentFilters.themes.push(btn.dataset.theme);
+              }
+            });
+            
+            // If no themes selected, select "All"
+            if (currentFilters.themes.length === 0) {
+              document.querySelector('#themesFilter [data-theme="all"]').classList.add('active');
+            }
+          }
+          
+          applyFilters();
+        }
+      });
+      
+      // Reset filters
+      resetFiltersBtn.addEventListener('click', () => {
+        // Reset current filters
+        currentFilters = {
+          status: 'all',
+          prize: 'all',
+          participants: 'all',
+          themes: []
+        };
+        
+        // Reset UI
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        document.querySelectorAll('.filter-options [data-status="all"], ' +
+                                 '.filter-options [data-prize="all"], ' +
+                                 '.filter-options [data-participants="all"], ' +
+                                 '.filter-options [data-theme="all"]').forEach(btn => {
+          btn.classList.add('active');
+        });
+        
+        applyFilters();
+      });
+    }
+
+    // Event listeners
+    refreshBtn.addEventListener('click', fetchHackathons);
+    
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      setupFilterButtons();
+      fetchHackathons();
+    });
+  </script>
+</body>
+</html>
