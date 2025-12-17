@@ -1,12 +1,6 @@
 // 1️⃣ Initialize Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyB-Xve-6sZQLxpYUt3GXl4svafoU06095o",
-  authDomain: "hack-job-958fe.firebaseapp.com",
-  projectId: "hack-job-958fe",
-  storageBucket: "hack-job-958fe.appspot.com",
-  messagingSenderId: "967253891072",
-  appId: "1:967253891072:web:84e092e268115d120ee0e5",
-  measurementId: "G-4Z7Q285FG5"
+  
 };
 
 firebase.initializeApp(firebaseConfig);
